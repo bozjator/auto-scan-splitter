@@ -1,0 +1,19 @@
+# Ignore test image folders and raw scans
+incoming/
+extracted/
+processed/
+*.jpg
+*.jpeg
+*.png
+*.JPG
+*.JPEG
+*.PNG
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# OS & Environment
+.DS_Store
+.idea/
+.vscode/
