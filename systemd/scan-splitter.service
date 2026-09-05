@@ -1,0 +1,14 @@
+[Unit]
+Description=Auto Scan Splitter Service
+After=network.target
+
+[Service]
+Type=simple
+User=uzo
+WorkingDirectory=/opt/auto-scan-splitter
+ExecStart=/bin/bash /opt/auto-scan-splitter/scripts/01_split_incoming.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

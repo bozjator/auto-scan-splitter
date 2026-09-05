@@ -9,10 +9,19 @@ It continuously monitors an incoming folder for full-page flatbed scanner images
 
 ## Project Structure
 
-```text
-scripts/
-├── scan_splitter.py          # Core OpenCV image segmentation and deskew script
-└── 01_watch_incoming.sh      # Folder watcher for new scans & execution trigger script
+```
+auto-scan-splitter/
+├── config/
+│   └── upload_destinations.conf    # List of SMB network shares for upload
+├── scripts/
+│   ├── scan_splitter.py            # Core OpenCV cropping engine
+│   ├── 01_split_incoming.sh        # Stage 1: New scans watcher & splitter
+│   └── 02_upload_queue.sh          # Stage 2: SMB uploader with retry queue
+├── systemd/
+│   ├── scan-splitter.service       # Systemd unit file for Stage 1
+│   └── scan-uploader.service       # Systemd unit file for Stage 2
+├── upload_queue/                   # Staging area for cropped images
+└── README.md
 ```
 
 ## Prerequisites
@@ -22,11 +31,17 @@ scripts/
 - OpenCV & NumPy
 
 ```sh
+# Refresh system local database of available software packages
+$ sudo apt update
+
 # Python
-$ sudo apt update && sudo apt install -y python3 python3-pip python3-venv
+$ sudo apt install -y python3 python3-pip python3-venv
 
 # OpenCV & NumPy
-$ sudo apt update && sudo apt install -y python3-opencv python3-numpy
+$ sudo apt install -y python3-opencv python3-numpy
+
+# Install inotify-tools used to monitor for new scans
+$ sudo apt install -y inotify-tools
 ```
 
 ## Commands
@@ -109,3 +124,34 @@ Match the settings in your printer's web interface to what you configured on you
 | **Store Directory** | The share name                              | `auto-scan-splitter`  |
 | **Username**        | The Samba user created on Server            | `scanneruser`         |
 | **Password**        | The Samba password you set with `smbpasswd` | `your_samba_password` |
+
+## Enable and Start Services
+
+```sh
+# 1. Copy the systemd unit files from your repo to the system directory
+sudo cp systemd/scan-splitter.service /etc/systemd/system/
+sudo cp systemd/scan-uploader.service /etc/systemd/system/
+
+# 2. Set proper root permissions on the service files
+sudo chmod 644 /etc/systemd/system/scan-splitter.service
+sudo chmod 644 /etc/systemd/system/scan-uploader.service
+
+# 3. Reload systemd configuration to register the new unit files
+sudo systemctl daemon-reload
+
+# 4. Enable (autostart on boot) and immediately start both services
+sudo systemctl enable --now scan-splitter.service scan-uploader.service
+```
+
+#### Useful Commands for Verification
+
+```sh
+# Check status of both services
+sudo systemctl status scan-splitter.service scan-uploader.service
+
+# View real-time logs for the splitter service
+sudo journalctl -u scan-splitter.service -f
+
+# View real-time logs for the SMB uploader service
+sudo journalctl -u scan-uploader.service -f
+```

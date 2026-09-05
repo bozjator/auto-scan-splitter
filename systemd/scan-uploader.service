@@ -1,0 +1,15 @@
+[Unit]
+Description=Auto Scan Splitter SMB Uploader Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=uzo
+WorkingDirectory=/opt/auto-scan-splitter
+ExecStart=/bin/bash /opt/auto-scan-splitter/scripts/02_upload_queue.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
