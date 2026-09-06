@@ -1,0 +1,15 @@
+# This project is deployed to a Linux server via rsync and driven by systemd,
+# so every text file must check out with LF endings. A CRLF shell script fails
+# with "/bin/bash^M: bad interpreter", and a CRLF systemd unit will not parse.
+#
+# These rules take precedence over core.autocrlf, which is true on the Windows
+# machine this repo is edited on.
+* text=auto eol=lf
+
+# Scans and photos must never have their bytes rewritten.
+*.jpg  binary
+*.jpeg binary
+*.png  binary
+*.tif  binary
+*.tiff binary
+*.pdf  binary
