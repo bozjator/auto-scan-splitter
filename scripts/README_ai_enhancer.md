@@ -6,7 +6,7 @@ uploader services.
 
 ## What it does
 
-For every `*.jpg` in `RAW_DIR`:
+For every `*.jpg` / `*.jpeg` in `RAW_DIR` (case insensitive):
 
 1. **Colour correction.** Faded scans carry a per-channel colour veil (usually blue/cyan) that
    neither AI tool removes. A per-channel percentile stretch lifts the faded blacks, a

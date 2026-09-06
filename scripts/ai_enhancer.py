@@ -135,7 +135,8 @@ def process_photos(use_realesrgan=True, use_color=True):
     os.makedirs(ENHANCED_DIR, exist_ok=True)
     os.makedirs(TEMP_DIR, exist_ok=True)
 
-    raw_files = sorted(glob.glob(os.path.join(RAW_DIR, "*.jpg")))
+    raw_files = sorted(
+        glob.glob(os.path.join(RAW_DIR, "*.jpg")) + glob.glob(os.path.join(RAW_DIR, "*.jpeg")))
     print(f"Found {len(raw_files)} photos in Raw directory.")
     if not use_realesrgan:
         print("Real-ESRGAN disabled: running CodeFormer face restoration only.")
@@ -157,8 +158,9 @@ def process_photos(use_realesrgan=True, use_color=True):
 
         print(f"--> Processing: {filename}")
 
-        # Local temporary working paths on fast NVMe/SSD
-        temp_raw = os.path.join(TEMP_DIR, f"raw_{filename}")
+        # Local temporary working paths on fast NVMe/SSD. The raw copy is renamed to
+        # .jpg so downstream tools never have to handle other spellings of the extension.
+        temp_raw = os.path.join(TEMP_DIR, f"raw_{stem}.jpg")
         temp_cc = os.path.join(TEMP_DIR, f"cc_{stem}.png")
         temp_x4 = os.path.join(TEMP_DIR, f"x4_{stem}.png")
         temp_native = os.path.join(TEMP_DIR, f"native_{stem}.png")
