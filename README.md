@@ -137,10 +137,13 @@ $ sudo apt install cifs-utils
 # Securely Store Your SMB Credentials
 $ sudo mkdir -p /etc/smbcredentials
 $ sudo nano /etc/smbcredentials/synology-scan-photos.cred
-   # Add credential in this format:
-   username=your_nas_user
-   password=your_nas_password
-   domain=WORKGROUP
+
+# Add credential
+sudo bash -c 'cat << "EOF" > /etc/smbcredentials/synology-scan-photos.cred
+username=YourUsername
+password=YourPassword
+EOF'
+
 # Lock down file permissions so only root can read it
 $ sudo chmod 600 /etc/smbcredentials/synology-scan-photos.cred
 
@@ -150,12 +153,13 @@ $ sudo mkdir -p /mnt/net_drive/synology/scan-photos
 # Add Mount Entries to /etc/fstab
 $ sudo nano /etc/fstab
    # Synology Scan Photos SMB Mount (replace 'uzo' with your root username)
-   //192.168.1.5/ScanPhotos /mnt/net_drive/synology/scan-photos cifs credentials=/etc/smbcredentials/synology-scan-photos.cred,uid=uzo,gid=uzo,iocharset=utf8,_netdev,nofail,x-systemd.automount 0 0
+   //192.168.1.5/ScanPhotos /mnt/net_drive/synology/scan-photos cifs credentials=/etc/smbcredentials/synology-scan-photos.cred,vers=3.0,uid=uzo,gid=uzo,iocharset=utf8,_netdev,nofail,x-systemd.automount 0 0
    # INFO about /etc/fstab record
    - //192.168.1.100/ScanPhotos: The remote network path to your SMB share.
    - /mnt/synology_photos: The local directory where it will appear.
    - cifs: The filesystem type used for Windows/Synology SMB shares.
    - credentials=...: Path to the secure credentials file created in Step 2.
+   - vers=...: SMB version
    - uid=uzo,gid=uzo: Very Important! Sets the file ownership to your Linux user account so your upload script can write to it without needing sudo.
    - _netdev: Tells Linux to wait until the network interface is up before attempting to mount.
    - nofail: Crucial safety setting. If your NAS is powered off or unplugged when Ubuntu boots, nofail stops Linux from hanging or crashing during boot.
@@ -173,7 +177,7 @@ $ sudo systemctl daemon-reload
 $ sudo mount -a
 
 # Check if the mount point is active
-$ df -h | grep synology
+$ df -h | grep net_drive
 
 # Verify your user owns the directory and can write to it
 ls -ld /mnt/net_drive/synology/scan-photos
