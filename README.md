@@ -185,7 +185,23 @@ ls -ld /mnt/net_drive/synology/scan-photos
 touch /mnt/net_drive/synology/scan-photos/test.txt && rm /mnt/net_drive/synology/scan-photos/test.txt
 ```
 
-# 3. Enable and Start Services
+# 3. Transfer project to server
+
+```sh
+# Create the directory and assign ownership to your user
+$ sudo mkdir -p /opt/auto-scan-splitter
+$ sudo chown -R uzo:uzo /opt/auto-scan-splitter
+
+# From Windows PowerShell / Git Bash:
+$ rsync -avz --exclude '.git' --exclude '__pycache__' --exclude 'venv' /d/Projects/auto-scan-splitter/ uzo@ubuntu-server:/opt/auto-scan-splitter/
+
+
+# 2. Ensure scripts are executable
+$ cd /opt/auto-scan-splitter
+$ chmod +x scripts/*.sh scripts/*.py
+```
+
+# 4. Enable and Start Services
 
 ```sh
 # 1. Copy the systemd unit files from your repo to the system directory
