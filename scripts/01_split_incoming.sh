@@ -3,11 +3,11 @@ set -euo pipefail
 
 # Define relative paths based on repo root
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-INCOMING_DIR="$REPO_DIR/incoming" # TODO this should be configurable via env variable or config file
+INCOMING_DIR="/srv/auto-scan-splitter"
 QUEUE_DIR="$REPO_DIR/upload_queue"
 SPLITTER_SCRIPT="$REPO_DIR/scripts/scan_splitter.py"
 
-mkdir -p "$INCOMING_DIR" "$QUEUE_DIR"
+mkdir -p "$QUEUE_DIR"
 
 echo "Started Scan Splitter Watcher on: $INCOMING_DIR"
 

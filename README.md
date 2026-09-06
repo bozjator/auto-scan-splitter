@@ -2,7 +2,7 @@
 
 Automated scripts to monitor incoming multi-photo scans and split them into individual cropped photos.
 
-## Overview
+# Overview
 
 This project provides an automated pipeline for batch photo restoration.
 It continuously monitors an incoming folder for full-page flatbed scanner images, automatically detects individual photos, deskews them, crops them into standalone files, and routes scanned and processed files to downstream processing queues or local/NAS storage.
@@ -51,7 +51,7 @@ $ sudo apt install -y inotify-tools
 $ python3 scan_splitter.py /path/to/scan.jpg /path/to/output_dir
 ```
 
-## Samba SMB
+# 1. Setting up Samba SMB
 
 Setup Samba to store your scanned images to your server.
 
@@ -125,33 +125,88 @@ Match the settings in your printer's web interface to what you configured on you
 | **Username**        | The Samba user created on Server            | `scanneruser`         |
 | **Password**        | The Samba password you set with `smbpasswd` | `your_samba_password` |
 
-## Enable and Start Services
+# 2. Mount network storage to upload individual photos
+
+Here we set /etc/fstab for SMB mounts.  
+/etc/fstab (File System Table) tells which disk drives and remote network shares to mount automatically when the system boots up.
+
+```sh
+# Install the cifs-utils package, required to mount SMB/CIFS shared folders
+$ sudo apt install -y cifs-utils
+
+# Securely Store Your SMB Credentials
+$ sudo mkdir -p /etc/smbcredentials
+$ sudo nano /etc/smbcredentials/synology-scan-photos.cred
+   # Add credential in this format:
+   username=your_nas_user
+   password=your_nas_password
+   domain=WORKGROUP
+# Lock down file permissions so only root can read it
+$ sudo chmod 600 /etc/smbcredentials/synology-scan-photos.cred
+
+# Create the local directory where the network share will attach
+$ sudo mkdir -p /mnt/net_drive/synology/scan-photos
+
+# Add Mount Entries to /etc/fstab
+$ sudo nano /etc/fstab
+   # Synology Scan Photos SMB Mount (replace 'uzo' with your root username)
+   //192.168.1.5/ScanPhotos /mnt/net_drive/synology/scan-photos cifs credentials=/etc/smbcredentials/synology-scan-photos.cred,uid=uzo,gid=uzo,iocharset=utf8,_netdev,nofail,x-systemd.automount 0 0
+   # INFO about /etc/fstab record
+   - //192.168.1.100/ScanPhotos: The remote network path to your SMB share.
+   - /mnt/synology_photos: The local directory where it will appear.
+   - cifs: The filesystem type used for Windows/Synology SMB shares.
+   - credentials=...: Path to the secure credentials file created in Step 2.
+   - uid=uzo,gid=uzo: Very Important! Sets the file ownership to your Linux user account so your upload script can write to it without needing sudo.
+   - _netdev: Tells Linux to wait until the network interface is up before attempting to mount.
+   - nofail: Crucial safety setting. If your NAS is powered off or unplugged when Ubuntu boots, nofail stops Linux from hanging or crashing during boot.
+   - x-systemd.automount: Tells systemd to automatically mount the share the exact second a process (like your script) tries to access /mnt/synology_photos.
+
+```
+
+#### Test the Mount Setup
+
+```sh
+# Reload systemd to detect the new auto mount entries
+$ sudo systemctl daemon-reload
+
+# Test mounting everything in /etc/fstab
+$ sudo mount -a
+
+# Check if the mount point is active
+$ df -h | grep synology
+
+# Verify your user owns the directory and can write to it
+ls -ld /mnt/net_drive/synology/scan-photos
+touch /mnt/net_drive/synology/scan-photos/test.txt && rm /mnt/net_drive/synology/scan-photos/test.txt
+```
+
+# 3. Enable and Start Services
 
 ```sh
 # 1. Copy the systemd unit files from your repo to the system directory
-sudo cp systemd/scan-splitter.service /etc/systemd/system/
-sudo cp systemd/scan-uploader.service /etc/systemd/system/
+$ sudo cp systemd/scan-splitter.service /etc/systemd/system/
+$ sudo cp systemd/scan-uploader.service /etc/systemd/system/
 
 # 2. Set proper root permissions on the service files
-sudo chmod 644 /etc/systemd/system/scan-splitter.service
-sudo chmod 644 /etc/systemd/system/scan-uploader.service
+$ sudo chmod 644 /etc/systemd/system/scan-splitter.service
+$ sudo chmod 644 /etc/systemd/system/scan-uploader.service
 
 # 3. Reload systemd configuration to register the new unit files
-sudo systemctl daemon-reload
+$ sudo systemctl daemon-reload
 
 # 4. Enable (autostart on boot) and immediately start both services
-sudo systemctl enable --now scan-splitter.service scan-uploader.service
+$ sudo systemctl enable --now scan-splitter.service scan-uploader.service
 ```
 
 #### Useful Commands for Verification
 
 ```sh
 # Check status of both services
-sudo systemctl status scan-splitter.service scan-uploader.service
+$ sudo systemctl status scan-splitter.service scan-uploader.service
 
 # View real-time logs for the splitter service
-sudo journalctl -u scan-splitter.service -f
+$ sudo journalctl -u scan-splitter.service -f
 
 # View real-time logs for the SMB uploader service
-sudo journalctl -u scan-uploader.service -f
+$ sudo journalctl -u scan-uploader.service -f
 ```
