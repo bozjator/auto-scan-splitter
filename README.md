@@ -28,10 +28,15 @@ auto-scan-splitter/
 
 ## Prerequisites
 
+> **Run this section on the server** - the machine that will host the services in
+> section 4. Every package below is required at runtime. Skipping this step makes
+> both services crash-loop on startup with a "'tool' not found" line in the
+> journal, because each script checks its dependencies before starting.
+
 - Linux
 - Python 3.x
 - OpenCV & NumPy
-- rsync
+- inotify-tools, rsync
 
 ```sh
 # Refresh system local database of available software packages
@@ -48,6 +53,11 @@ $ sudo apt install inotify-tools
 
 # Install rsync package
 $ sudo apt install rsync
+
+# Verify every tool the services need is actually present before section 4
+$ for t in python3 inotifywait rsync findmnt flock timeout; do \
+      command -v "$t" >/dev/null && echo "ok: $t" || echo "MISSING: $t"; done
+$ python3 -c "import cv2, numpy; print('ok: opencv', cv2.__version__)"
 ```
 
 ## Commands
@@ -207,6 +217,10 @@ $ chmod +x scripts/*.sh scripts/*.py
 ```
 
 # 4. Enable and Start Services
+
+> Requires the Prerequisites packages, the Samba share from section 1 and the
+> mounts from section 2 to already be in place on this server. If a service
+> crash-loops after this, `journalctl -u <service>` names the exact missing piece.
 
 ```sh
 # 1. Copy the systemd unit files from your repo to the system directory
