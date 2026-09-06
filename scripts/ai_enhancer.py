@@ -4,6 +4,7 @@ import glob
 import subprocess
 import shutil
 
+import numpy as np
 from PIL import Image
 
 # x4 output can exceed PIL's ~89MP decompression-bomb guard on large scans
@@ -28,6 +29,41 @@ REALESRGAN_SCALE = 4
 CODEFORMER_UPSCALE = 1
 FIDELITY_WEIGHT = 0.7  # 1.0 = original facial accuracy, 0.0 = full AI restoration
 JPEG_QUALITY = 95
+
+# Faded scans carry a per-channel colour veil (often blue/cyan) that neither Real-ESRGAN
+# nor CodeFormer removes, so it is corrected up front: a per-channel percentile stretch
+# lifts the faded blacks, a white-patch balance neutralises the cast using the brightest
+# neutral regions, then mild saturation and midtone lifts restore a fresh-print look.
+COLOR_STRETCH_PERCENTILES = (0.5, 99.5)
+COLOR_WHITE_PATCH_PERCENTILE = 95.0
+COLOR_SATURATION = 1.2
+COLOR_GAMMA = 0.9
+
+
+def correct_color(rgb):
+    """Remove a faded scan's colour veil from an RGB uint8 array."""
+    arr = rgb.astype(np.float64)
+
+    lo_pct, hi_pct = COLOR_STRETCH_PERCENTILES
+    for i in range(3):
+        c = arr[:, :, i]
+        lo, hi = np.percentile(c, [lo_pct, hi_pct])
+        if hi - lo >= 1:
+            arr[:, :, i] = (c - lo) * (255.0 / (hi - lo))
+    arr = np.clip(arr, 0, 255)
+
+    luma = arr.mean(axis=2)
+    white = arr[luma >= np.percentile(luma, COLOR_WHITE_PATCH_PERCENTILE)].mean(axis=0)
+    arr = np.clip(arr * (white.mean() / np.maximum(white, 1e-6)), 0, 255)
+
+    if COLOR_SATURATION != 1.0:
+        luma = arr @ np.array([0.299, 0.587, 0.114])
+        arr = np.clip(luma[:, :, None] + (arr - luma[:, :, None]) * COLOR_SATURATION, 0, 255)
+
+    if COLOR_GAMMA != 1.0:
+        arr = np.clip(255.0 * (arr / 255.0) ** COLOR_GAMMA, 0, 255)
+
+    return arr.astype(np.uint8)
 
 
 def run_realesrgan(input_file, output_file):
@@ -81,7 +117,7 @@ def convert_to_jpeg(png_path, jpeg_path):
         img.convert("RGB").save(jpeg_path, "JPEG", quality=JPEG_QUALITY, subsampling=0, optimize=True)
 
 
-def process_photos(use_realesrgan=True):
+def process_photos(use_realesrgan=True, use_color=True):
     os.makedirs(ENHANCED_DIR, exist_ok=True)
     os.makedirs(TEMP_DIR, exist_ok=True)
 
@@ -89,13 +125,15 @@ def process_photos(use_realesrgan=True):
     print(f"Found {len(raw_files)} photos in Raw directory.")
     if not use_realesrgan:
         print("Real-ESRGAN disabled: running CodeFormer face restoration only.")
+    if not use_color:
+        print("Colour correction disabled.")
 
     for raw_path in raw_files:
         filename = os.path.basename(raw_path)
         stem = os.path.splitext(filename)[0]
-        # Faces-only runs get their own suffix so the two modes never overwrite each
-        # other and the skip check below stays correct per mode.
-        suffix = "" if use_realesrgan else "_facesonly"
+        # Non-default modes get their own suffix so runs never overwrite each other
+        # and the skip check below stays correct per mode.
+        suffix = ("" if use_realesrgan else "_facesonly") + ("" if use_color else "_nocolor")
         final_output_path = os.path.join(ENHANCED_DIR, f"{stem}{suffix}.jpg")
 
         # Skip photos that have already been enhanced in this mode
@@ -107,6 +145,7 @@ def process_photos(use_realesrgan=True):
 
         # Local temporary working paths on fast NVMe/SSD
         temp_raw = os.path.join(TEMP_DIR, f"raw_{filename}")
+        temp_cc = os.path.join(TEMP_DIR, f"cc_{stem}.png")
         temp_x4 = os.path.join(TEMP_DIR, f"x4_{stem}.png")
         temp_native = os.path.join(TEMP_DIR, f"native_{stem}.png")
         temp_codeformer_dir = os.path.join(TEMP_DIR, f"codeformer_{stem}")
@@ -116,19 +155,28 @@ def process_photos(use_realesrgan=True):
             # Copy raw file from SMB share to local SSD for fast processing
             shutil.copy2(raw_path, temp_raw)
 
+            if use_color:
+                print("    Correcting colour cast...")
+                with Image.open(temp_raw) as im:
+                    corrected = correct_color(np.asarray(im.convert("RGB")))
+                Image.fromarray(corrected).save(temp_cc, "PNG")
+                stage_input = temp_cc
+            else:
+                stage_input = temp_raw
+
             if use_realesrgan:
-                with Image.open(temp_raw) as img:
+                with Image.open(stage_input) as img:
                     native_size = img.size
 
                 print("    Cleaning up background (Real-ESRGAN x4)...")
-                run_realesrgan(temp_raw, temp_x4)
+                run_realesrgan(stage_input, temp_x4)
 
                 print("    Downscaling to native resolution...")
                 downscale_to_native(temp_x4, temp_native, native_size)
                 os.remove(temp_x4)
                 codeformer_input = temp_native
             else:
-                codeformer_input = temp_raw
+                codeformer_input = stage_input
 
             print("    Restoring facial details (CodeFormer)...")
             restored_png = run_codeformer(codeformer_input, temp_codeformer_dir)
@@ -146,7 +194,7 @@ def process_photos(use_realesrgan=True):
         finally:
             # Clean up local temp files, including CodeFormer's whole result tree
             shutil.rmtree(temp_codeformer_dir, ignore_errors=True)
-            for tmp in [temp_raw, temp_x4, temp_native, temp_jpeg]:
+            for tmp in [temp_raw, temp_cc, temp_x4, temp_native, temp_jpeg]:
                 if os.path.exists(tmp):
                     os.remove(tmp)
 
@@ -158,8 +206,11 @@ def main():
         "--no-realesrgan", action="store_true",
         help="Skip the Real-ESRGAN background stage and run CodeFormer face restoration only. "
              "Outputs are written with a _facesonly suffix so they can be compared side by side.")
+    parser.add_argument(
+        "--no-color", action="store_true",
+        help="Skip the colour-cast correction stage. Outputs are written with a _nocolor suffix.")
     args = parser.parse_args()
-    process_photos(use_realesrgan=not args.no_realesrgan)
+    process_photos(use_realesrgan=not args.no_realesrgan, use_color=not args.no_color)
 
 
 if __name__ == "__main__":
