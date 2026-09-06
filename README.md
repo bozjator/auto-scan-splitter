@@ -7,6 +7,8 @@ Automated scripts to monitor incoming multi-photo scans and split them into indi
 This project provides an automated pipeline for batch photo restoration.
 It continuously monitors an incoming folder for full-page flatbed scanner images, automatically detects individual photos, deskews them, crops them into standalone files, and routes scanned and processed files to downstream processing queues or local/NAS storage.
 
+> Data flow: Scanner → SMB → /srv/auto-scan-splitter → splitter → upload_queue → NAS
+
 ## Project Structure
 
 ```
@@ -29,6 +31,7 @@ auto-scan-splitter/
 - Linux
 - Python 3.x
 - OpenCV & NumPy
+- rsync
 
 ```sh
 # Refresh system local database of available software packages
@@ -42,6 +45,9 @@ $ sudo apt install python3-opencv python3-numpy
 
 # Install inotify-tools used to monitor for new scans
 $ sudo apt install inotify-tools
+
+# Install rsync package
+$ sudo apt install rsync
 ```
 
 ## Commands
@@ -152,18 +158,18 @@ $ sudo mkdir -p /mnt/net_drive/synology/scan-photos
 
 # Add Mount Entries to /etc/fstab
 $ sudo nano /etc/fstab
-   # Synology Scan Photos SMB Mount (replace 'uzo' with your root username)
+   # Synology Scan Photos SMB Mount (replace 'uzo' with your username)
    //192.168.1.5/ScanPhotos /mnt/net_drive/synology/scan-photos cifs credentials=/etc/smbcredentials/synology-scan-photos.cred,vers=3.0,uid=uzo,gid=uzo,iocharset=utf8,_netdev,nofail,x-systemd.automount 0 0
    # INFO about /etc/fstab record
    - //192.168.1.100/ScanPhotos: The remote network path to your SMB share.
-   - /mnt/synology_photos: The local directory where it will appear.
+   - /mnt/net_drive/synology/scan-photos: The local directory where it will appear.
    - cifs: The filesystem type used for Windows/Synology SMB shares.
    - credentials=...: Path to the secure credentials file created in Step 2.
    - vers=...: SMB version
    - uid=uzo,gid=uzo: Very Important! Sets the file ownership to your Linux user account so your upload script can write to it without needing sudo.
    - _netdev: Tells Linux to wait until the network interface is up before attempting to mount.
    - nofail: Crucial safety setting. If your NAS is powered off or unplugged when Ubuntu boots, nofail stops Linux from hanging or crashing during boot.
-   - x-systemd.automount: Tells systemd to automatically mount the share the exact second a process (like your script) tries to access /mnt/synology_photos.
+   - x-systemd.automount: Tells systemd to automatically mount the share the exact second a process (like your script) tries to access /mnt/net_drive/synology/scan-photos.
 
 ```
 
@@ -192,11 +198,10 @@ touch /mnt/net_drive/synology/scan-photos/test.txt && rm /mnt/net_drive/synology
 $ sudo mkdir -p /opt/auto-scan-splitter
 $ sudo chown -R uzo:uzo /opt/auto-scan-splitter
 
-# From Windows PowerShell / Git Bash:
+# Transfer to server
 $ rsync -avz --exclude '.git' --exclude '__pycache__' --exclude 'venv' /d/Projects/auto-scan-splitter/ uzo@ubuntu-server:/opt/auto-scan-splitter/
 
-
-# 2. Ensure scripts are executable
+# Ensure scripts are executable
 $ cd /opt/auto-scan-splitter
 $ chmod +x scripts/*.sh scripts/*.py
 ```

@@ -1,7 +1,6 @@
 # Ignore test image folders and raw scans
 incoming/
-extracted/
-processed/
+upload_queue/
 *.jpg
 *.jpeg
 *.png

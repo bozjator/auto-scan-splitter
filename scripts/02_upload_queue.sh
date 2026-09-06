@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 QUEUE_DIR="$REPO_DIR/upload_queue"
-CONFIG_FILE="$REPO_DIR/config/destinations.conf"
+CONFIG_FILE="$REPO_DIR/config/upload_destinations.conf"
 
 mkdir -p "$QUEUE_DIR"
 
