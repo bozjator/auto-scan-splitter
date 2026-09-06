@@ -10,7 +10,8 @@ CONFIG_FILE="$REPO_DIR/config/upload_destinations.conf"
 LOCK_FILE="$QUEUE_DIR/.upload_queue.lock"
 
 # A queued file must be this old before we touch it, so we never upload a crop
-# the splitter is still writing.
+# the splitter is still writing. Only the glob-based backlog/retry pass needs
+# this; event-driven uploads act on a named file that close_write proves is done.
 MIN_AGE_SECONDS=3
 
 # Bounds how long one destination may stall the loop. An offline NAS behind a
@@ -148,26 +149,47 @@ preflight
 echo "Started SMB Queue Manager (Hybrid Mode)..."
 
 backoff="$BACKOFF_INITIAL"
+retry_now=true
 
-while true; do
-    # 1 & 3. Process existing queue items (handles reboot backlog or network retries)
-    if ! process_queue; then
-        echo "Upload errors encountered or destination offline. Queue depth: $QUEUE_DEPTH. Retrying in ${backoff}s..."
-        sleep "$backoff"
-        backoff=$((backoff * 2))
-        if [ "$backoff" -gt "$BACKOFF_MAX" ]; then
-            backoff="$BACKOFF_MAX"
+# One persistent monitor, not one restarted per loop. inotify reports each event
+# exactly once, at the instant it happens, so a short-lived inotifywait drops
+# every event that fires while we are busy. In monitor mode the events we have
+# not read yet wait in the pipe buffer instead, and the read below blocks inside
+# the kernel - so an idle uploader still costs no CPU, which is the whole point
+# of using inotify.
+inotifywait -m -q -e close_write,moved_to --format '%w%f' "$QUEUE_DIR" | {
+    while :; do
+        # 1 & 3. Backlog at startup, and retries after any failure. This pass is
+        # glob-based, so it is age-filtered to skip crops still being written.
+        if [ "$retry_now" = true ]; then
+            retry_now=false
+            if ! process_queue; then
+                echo "Upload errors encountered or destination offline. Queue depth: $QUEUE_DEPTH. Retrying in ${backoff}s..."
+                sleep "$backoff"
+                backoff=$((backoff * 2))
+                if [ "$backoff" -gt "$BACKOFF_MAX" ]; then
+                    backoff="$BACKOFF_MAX"
+                fi
+                retry_now=true
+                continue
+            fi
+            backoff="$BACKOFF_INITIAL"
         fi
-        continue
-    fi
-    backoff="$BACKOFF_INITIAL"
 
-    # 2. Queue is clear! Block on inotifywait for the next new file event.
-    # -t 300 acts as a 5-minute keep-alive check.
-    echo "Queue clear. Waiting for new files..."
-    if inotifywait -q -t 300 -e close_write,moved_to "$QUEUE_DIR"; then
-        # Let the just-closed file age past MIN_AGE_SECONDS so the scan above
-        # sees it as complete instead of skipping it as still in flight.
-        sleep "$MIN_AGE_SECONDS"
-    fi
-done
+        # 2. Idle: block here, zero CPU, until the next crop lands.
+        if ! IFS= read -r filepath; then
+            echo "ERROR: inotify monitor exited; letting systemd restart us." >&2
+            break
+        fi
+
+        # close_write and moved_to both mean the writer has finished, so the
+        # named file is already complete and can go straight out. The age filter
+        # is only needed for the glob-based pass above, which is why the old
+        # "sleep then re-scan" approach kept skipping freshly closed files.
+        if [ -f "$filepath" ]; then
+            if ! upload_file "$filepath"; then
+                retry_now=true
+            fi
+        fi
+    done
+}
