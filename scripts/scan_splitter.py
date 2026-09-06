@@ -3,6 +3,7 @@ import numpy as np
 import sys
 import os
 import glob
+from datetime import datetime
 
 def process_scan(image_path, output_dir, margin_trim=10):
     if not os.path.exists(output_dir):
@@ -15,7 +16,6 @@ def process_scan(image_path, output_dir, margin_trim=10):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
     # 1. Threshold background (assumes lighter scanner bed background)
-    # Adjust 230 lower if scanner lid is off-white/gray
     _, thresh = cv2.threshold(gray, 220, 255, cv2.THRESH_BINARY_INV)
 
     # Clean up small scanner dust/noise
@@ -26,8 +26,9 @@ def process_scan(image_path, output_dir, margin_trim=10):
     # 2. Find individual photo contours
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    idx = 0
-    base_name = os.path.splitext(os.path.basename(image_path))[0]
+    idx = 1
+    # Generate timestamp naming prefix: YYYYMMDD_HHMMSS
+    timestamp_prefix = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     for cnt in contours:
         # Ignore tiny regions (dust or small border artifacts)
@@ -42,8 +43,7 @@ def process_scan(image_path, output_dir, margin_trim=10):
         if w < h:
             angle = angle - 90
 
-        # SAFEGUARD: Prevent the 45° / 90° rotation bug!
-        # If angle calculation flips to adjacent axis, normalize it back to zero
+        # SAFEGUARD: Normalize angles to prevent 45° / 90° rotation bugs
         while angle < -45:
             angle += 90
         while angle > 45:
@@ -71,7 +71,8 @@ def process_scan(image_path, output_dir, margin_trim=10):
         crop = rotated_img[y:y+h_box, x:x+w_box]
 
         if crop.size > 0:
-            output_filename = os.path.join(output_dir, f"{base_name}_split_{idx:02d}.jpg")
+            # Output filename format: YYYYMMDD_HHMMSS_01.jpg
+            output_filename = os.path.join(output_dir, f"{timestamp_prefix}_{idx:02d}.jpg")
             cv2.imwrite(output_filename, crop, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
             print(f"Saved: {output_filename} (Angle applied: {angle:.2f}°)")
             idx += 1
