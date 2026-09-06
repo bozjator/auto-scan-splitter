@@ -35,13 +35,13 @@ auto-scan-splitter/
 $ sudo apt update
 
 # Python
-$ sudo apt install -y python3 python3-pip python3-venv
+$ sudo apt install python3 python3-pip python3-venv
 
 # OpenCV & NumPy
-$ sudo apt install -y python3-opencv python3-numpy
+$ sudo apt install python3-opencv python3-numpy
 
 # Install inotify-tools used to monitor for new scans
-$ sudo apt install -y inotify-tools
+$ sudo apt install inotify-tools
 ```
 
 ## Commands
@@ -132,7 +132,7 @@ Here we set /etc/fstab for SMB mounts.
 
 ```sh
 # Install the cifs-utils package, required to mount SMB/CIFS shared folders
-$ sudo apt install -y cifs-utils
+$ sudo apt install cifs-utils
 
 # Securely Store Your SMB Credentials
 $ sudo mkdir -p /etc/smbcredentials
