@@ -20,6 +20,7 @@ TEMP_DIR = r"D:\AI_Photo_Restoration_Temp\ai_processing"  # Fast local SSD direc
 REALESRGAN_EXE = r"D:\AI_Tools\realesrgan-ncnn-vulkan-20220424-windows\realesrgan-ncnn-vulkan.exe"
 CODEFORMER_DIR = r"D:\AI_Tools\CodeFormer"
 PYTHON_EXE = os.path.join(CODEFORMER_DIR, "venv", "Scripts", "python.exe")
+COUNT_FACES_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "count_faces.py")
 
 # Real-ESRGAN only produces clean output at its native x4 scale; -s 1/-s 2 emit blocky
 # tile artifacts in this build. The x4 result is downscaled back to the scan's native
@@ -111,6 +112,19 @@ def run_codeformer(input_file, output_dir, fidelity=FIDELITY_WEIGHT):
     return os.path.join(output_dir, "final_results", f"{basename}.png")
 
 
+def count_faces(image_file):
+    """
+    Number of faces CodeFormer would restore in image_file, so a faceless photo can skip
+    the CodeFormer stage instead of paying for a model load that restores nothing.
+    """
+    env = os.environ.copy()
+    env["PYTHONPATH"] = CODEFORMER_DIR
+    result = subprocess.run(
+        [PYTHON_EXE, COUNT_FACES_SCRIPT, image_file],
+        cwd=CODEFORMER_DIR, env=env, capture_output=True, text=True, check=True)
+    return int(result.stdout.strip().splitlines()[-1])
+
+
 def convert_to_jpeg(png_path, jpeg_path):
     """Re-encode CodeFormer's lossless PNG as a high-quality JPEG (4:4:4, no chroma loss)."""
     with Image.open(png_path) as img:
@@ -178,13 +192,18 @@ def process_photos(use_realesrgan=True, use_color=True):
             else:
                 codeformer_input = stage_input
 
-            print("    Restoring facial details (CodeFormer)...")
-            restored_png = run_codeformer(codeformer_input, temp_codeformer_dir)
+            face_count = count_faces(codeformer_input)
+            if face_count == 0:
+                print("    No faces detected: skipping CodeFormer, keeping the background enhancement.")
+                enhanced = codeformer_input
+            else:
+                print(f"    Restoring {face_count} face(s) with CodeFormer...")
+                enhanced = run_codeformer(codeformer_input, temp_codeformer_dir)
 
             # Encode to a local JPEG first, so a failure part-way through can never
             # leave a truncated file in the Enhanced directory that the skip check
             # above would then treat as already done.
-            convert_to_jpeg(restored_png, temp_jpeg)
+            convert_to_jpeg(enhanced, temp_jpeg)
             shutil.move(temp_jpeg, final_output_path)
             print(f"    OK Saved to {final_output_path}")
 

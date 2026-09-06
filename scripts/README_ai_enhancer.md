@@ -15,7 +15,10 @@ For every `*.jpg` in `RAW_DIR`:
 2. **Real-ESRGAN** (`realesrgan-ncnn-vulkan`) at its native x4 scale, then Lanczos-downscaled
    back to the scan's original pixel dimensions. This removes scan noise, dust and JPEG
    artifacts and sharpens detail _without_ changing the resolution.
-3. **CodeFormer** face restoration at native resolution.
+3. **CodeFormer** face restoration at native resolution. A lightweight detection pass
+   (`scripts/count_faces.py`, same detector and thresholds as CodeFormer itself) runs first; if
+   a photo contains no detectable face, CodeFormer is skipped entirely and the colour-corrected,
+   denoised image is saved as-is. Faceless photos therefore still come out enhanced.
 
 The result is re-encoded as JPEG (quality 95, 4:4:4 chroma) and written to `ENHANCED_DIR` with
 the same pixel dimensions as the scan.
