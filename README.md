@@ -176,8 +176,9 @@ $ sudo systemctl daemon-reload
 # Test mounting everything in /etc/fstab
 $ sudo mount -a
 
-# Check if the mount point is active
+# Check if the mount storage is active
 $ df -h | grep net_drive
+$ findmnt --real
 
 # Verify your user owns the directory and can write to it
 ls -ld /mnt/net_drive/synology/scan-photos
