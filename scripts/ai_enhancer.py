@@ -28,7 +28,7 @@ COUNT_FACES_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "c
 REALESRGAN_SCALE = 4
 # CodeFormer's -s defaults to 2, a plain bilinear resize that adds no detail.
 CODEFORMER_UPSCALE = 1
-FIDELITY_WEIGHT = 0.7  # 1.0 = original facial accuracy, 0.0 = full AI restoration
+FIDELITY_WEIGHT = 0.9  # 1.0 = original facial accuracy, 0.0 = full AI restoration
 JPEG_QUALITY = 95
 
 # Faded scans carry a per-channel colour veil (often blue/cyan) that neither Real-ESRGAN
